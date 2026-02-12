@@ -7,12 +7,10 @@
 *.dll
 *.so
 *.dylib
-*.json
 
 # Test binary, built with `go test -c`
 *.test
-
-./test/* 
+./test/*
 test
 
 # Code coverage profiles and other test artifacts
@@ -35,15 +33,23 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# remove the go binary 
+# remove the go binary
 ./vault-swarm
 ./installer
 ./test-build
+
 # remove the plugin binary
 ./plugin_installer/plugin_installer
 approle.token
 
+# plugin build artifacts
+scripts/plugin/rootfs/
+scripts/plugin/
 scripts/plugin/rootfs/*
+
+# OS artifacts
+scripts/plugin/rootfs/*.DS_Store
+.DS_Store
 
 # MkDocs build output
 site/
