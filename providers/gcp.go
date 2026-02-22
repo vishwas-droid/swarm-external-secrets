@@ -36,6 +36,9 @@ func (g *GCPProvider) Initialize(config map[string]string) error {
 		CredentialsPath: getConfigOrDefault(config, "GOOGLE_APPLICATION_CREDENTIALS", ""),
 		CredentialsJSON: config["GCP_CREDENTIALS_JSON"],
 	}
+        if g.config.ProjectID == "" {
+            return fmt.Errorf("GCP_PROJECT_ID must be provided")
+        }
 
 	var client *secretmanager.Client
 	var err error
@@ -74,11 +77,11 @@ func (g *GCPProvider) GetSecret(ctx context.Context, req secrets.Request) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("failed to access secret version: %w", err)
 	}
+        if result.Payload == nil || result.Payload.Data == nil {
+            return nil, fmt.Errorf("secret %s has no payload data", secretName)
+        }
 
 	// Store version information for rotation tracking
-	if g.SupportsRotation() {
-		log.Printf("Secret version for rotation tracking: %s", result.Name)
-	}
 
 	// Extract the specific field from the secret data
 	secretData := result.Payload.Data
@@ -99,9 +102,6 @@ func (g *GCPProvider) buildSecretName(req secrets.Request) string {
 
 	// Default naming convention: projects/{project}/secrets/{secret-name}
 	projectID := g.config.ProjectID
-	if projectID == "" {
-		log.Fatal("GCP_PROJECT_ID is required but not configured. Please set the GCP_PROJECT_ID environment variable.")
-	}
 
 	secretName := req.SecretName
 	if req.ServiceName != "" {
