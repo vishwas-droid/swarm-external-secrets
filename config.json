@@ -5,7 +5,11 @@
     "types": ["docker.secretdriver/1.0","docker.secretprovider/1.0"],
     "socket": "plugin.sock"
   },
+<<<<<<< HEAD
   "entrypoint": ["./swarm-external-secrets"],
+=======
+  "entrypoint": ["/root/vault-secrets-plugin"],
+>>>>>>> 14616c7 (updated .gitignore, config.json,Dockerfile, driver.go, main.go, build.sh, smoke-test.sh)
   "workdir": "/root",
   "linux": {
     "capabilities": ["CAP_SYS_ADMIN"]
@@ -163,6 +167,7 @@
       "settable": ["value"]
     },
     {
+<<<<<<< HEAD
       "name": "ENABLE_MONITORING",
       "description": "Enable Monitoring secret rotation (true/false) default true",
       "settable": ["value"]
@@ -171,6 +176,16 @@
       "name": "MONITORING_PORT",
       "description": "default 8080",
       "settable": ["value"]
+=======
+  "name": "ENABLE_MONITORING",
+  "description": "Enable monitoring web interface (true/false)",
+  "settable": ["value"]
+    },
+    {
+  "name": "ENABLE_ROTATION",
+  "description": "Enable secret rotation (true/false)",
+  "settable": ["value"]
+>>>>>>> 14616c7 (updated .gitignore, config.json,Dockerfile, driver.go, main.go, build.sh, smoke-test.sh)
     },
     {
       "name": "uid",
