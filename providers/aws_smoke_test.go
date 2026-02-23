@@ -32,6 +32,7 @@ func TestAWSSecretsManager_Smoke_Localstack(t *testing.T) {
 	secretName := fmt.Sprintf("smoke-test-%d", time.Now().UnixNano())
 	secretValue := "super-secret-value"
 
+	// Create Secret
 	_, err = provider.client.CreateSecret(ctx, &secretsmanager.CreateSecretInput{
 		Name:         aws.String(secretName),
 		SecretString: aws.String(secretValue),
@@ -40,6 +41,7 @@ func TestAWSSecretsManager_Smoke_Localstack(t *testing.T) {
 		t.Fatalf("failed to create secret: %v", err)
 	}
 
+	// Get Secret
 	req := secrets.Request{
 		SecretName: secretName,
 	}
@@ -51,5 +53,20 @@ func TestAWSSecretsManager_Smoke_Localstack(t *testing.T) {
 
 	if string(value) != secretValue {
 		t.Fatalf("unexpected secret value: got %s", string(value))
+	}
+
+	// Delete Secret (force delete for LocalStack)
+	_, err = provider.client.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(secretName),
+		ForceDeleteWithoutRecovery: aws.Bool(true),
+	})
+	if err != nil {
+		t.Fatalf("failed to delete secret: %v", err)
+	}
+
+	// Verify Deletion
+	_, err = provider.GetSecret(ctx, req)
+	if err == nil {
+		t.Fatalf("expected error after deletion, but secret was still retrievable")
 	}
 }
