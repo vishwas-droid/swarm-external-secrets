@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+        "os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -43,7 +44,16 @@ func (a *AWSProvider) Initialize(config map[string]string) error {
 	}
 
 	// Create Secrets Manager client
-	a.client = secretsmanager.NewFromConfig(cfg)
+        endpoint := os.Getenv("AWS_ENDPOINT_URL")
+            if endpoint != "" {
+                a.client = secretsmanager.NewFromConfig(cfg, func(o *secretsmanager.Options) {
+                    o.BaseEndpoint = aws.String(endpoint)
+                })
+                log.Printf("AWS Secrets Manager initialized with custom endpoint: %s", endpoint)
+            } else {
+                  a.client = secretsmanager.NewFromConfig(cfg)
+                  log.Printf("Successfully initialized AWS Secrets Manager provider for region: %s", a.config.Region)
+              }
 
 	log.Printf("Successfully initialized AWS Secrets Manager provider for region: %s", a.config.Region)
 	return nil

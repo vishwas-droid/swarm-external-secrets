@@ -44,3 +44,5 @@ go.work.sum
 approle.token
 
 scripts/plugin/rootfs/*
+site/
+*.diff
