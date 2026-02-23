@@ -1,0 +1,6 @@
+site_name: Swarm External Secrets
+theme:
+  name: material
+
+nav:
+  - Home: index.md
