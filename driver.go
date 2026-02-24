@@ -426,8 +426,8 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 	log.Printf("Created new version of secret %s with name %s and ID: %s", secretName, newSecretName, createResponse.ID)
 
 	// Update all services that use this secret to point to the new version
-    if err := d.updateServicesSecretReference(secretName, newSecretName, createResponse.ID); err != nil {
-	    // try to remove the new secret since service update failed
+	if err := d.updateServicesSecretReference(secretName, newSecretName, createResponse.ID); err != nil {
+		// try to remove the new secret since service update failed
 		if cleanupErr := d.dockerClient.SecretRemove(ctx, createResponse.ID); cleanupErr != nil {
 			log.Warnf("failed to remove new secret %s after service update error: %v", createResponse.ID, cleanupErr)
 		}
