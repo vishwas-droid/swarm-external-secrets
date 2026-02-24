@@ -16,10 +16,11 @@ func getEnvOrDefault(key, defaultValue string) string {
 
 // parseDurationOrDefault parses duration string or returns default
 func parseDurationOrDefault(durationStr string) time.Duration {
-	if duration, err := time.ParseDuration(durationStr); err == nil {
-		return duration
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil || duration <= 0 {
+		return 5 * time.Minute
 	}
-	return 5 * time.Minute // Default to 5 minutes
+	return duration
 }
 
 // parseIntOrDefault parses integer string or returns default
