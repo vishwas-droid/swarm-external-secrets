@@ -431,9 +431,7 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 		    if cleanupErr := d.dockerClient.SecretRemove(ctx, createResponse.ID); cleanupErr != nil {
 			    log.Warnf("failed to remove new secret %s after service update error: %v", createResponse.ID, cleanupErr)
 		    }
-
 		    return fmt.Errorf("failed to update services to use new secret: %v", err)
-
 	    }
 
 	// Remove the old secret only after services are updated
