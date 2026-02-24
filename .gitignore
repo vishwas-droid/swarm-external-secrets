@@ -34,7 +34,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-
+# MkDocs build output
+.site/*
+site/*
 # remove the go binary 
 ./vault-swarm
 ./installer
