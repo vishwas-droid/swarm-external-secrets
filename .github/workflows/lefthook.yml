@@ -31,6 +31,18 @@ jobs:
 
       - name: Run lefthook pre-commit hooks
         run: lefthook run pre-commit --all-files
+        env:
+          CI: "true"
+
+      - name: Run golangci-lint
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Only report issues introduced by this PR
+            golangci-lint run --new-from-rev=${{ github.event.pull_request.base.sha }} ./...
+          else
+            # Full scan on push to main
+            golangci-lint run ./...
+          fi
 
       - name: Check for uncommitted changes
         run: git diff --exit-code

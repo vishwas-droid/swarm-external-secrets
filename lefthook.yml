@@ -27,6 +27,8 @@ pre-commit:
     golangci-lint:
       glob: "**/*.go"
       run: golangci-lint run ./... --timeout 10m
+      skip:
+        - run: test "$CI" = "true"
 
     gosec:
       glob: "**/*.go"
