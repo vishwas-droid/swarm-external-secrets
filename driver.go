@@ -444,29 +444,38 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 }
 
 // updateServicesSecretReference updates all services to use the new secret version
-func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretName, newSecretID string) error {
+func (d *SecretsDriver) updateServicesSecretReference(secretName, newSecretName, newSecretID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// List all services
-	services, err := d.dockerClient.ServiceList(ctx, swarm.ServiceListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list services: %v", err)
+	d.trackerMutex.RLock()
+	secretInfo, exists := d.secretTracker[secretName]
+	d.trackerMutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("no tracking information found for secret %s", secretName)
 	}
 
 	var updatedServices []string
 
-	for _, service := range services {
-		// Check if service uses this secret and update the reference
+	for _, serviceName := range secretInfo.ServiceNames {
+		service, _, err := d.dockerClient.ServiceInspectWithRaw(
+			ctx,
+			serviceName,
+			swarm.ServiceInspectOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to inspect service %s: %v", serviceName, err)
+		}
+
 		needsUpdate := false
 		updatedSecrets := make([]*swarm.SecretReference, len(service.Spec.TaskTemplate.ContainerSpec.Secrets))
 
 		for i, secretRef := range service.Spec.TaskTemplate.ContainerSpec.Secrets {
-			if secretRef.SecretName == oldSecretName {
-				// Update to use the new secret name and ID
+			if secretRef.SecretName == secretName {
 				updatedSecrets[i] = &swarm.SecretReference{
 					File:       secretRef.File,
-					SecretID:   newSecretID, // Use actual Docker secret ID
+					SecretID:   newSecretID,
 					SecretName: newSecretName,
 				}
 				needsUpdate = true
@@ -476,24 +485,17 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 		}
 
 		if needsUpdate {
-			// Update service with new secret references
 			serviceSpec := service.Spec
 			serviceSpec.TaskTemplate.ContainerSpec.Secrets = updatedSecrets
 
-			// Add/update a label to force the update
 			if serviceSpec.Labels == nil {
 				serviceSpec.Labels = make(map[string]string)
 			}
 			serviceSpec.Labels["vault.secret.rotated"] = fmt.Sprintf("%d", time.Now().Unix())
 
-			updateOptions := swarm.ServiceUpdateOptions{}
-			updateResponse, err := d.dockerClient.ServiceUpdate(ctx, service.ID, service.Version, serviceSpec, updateOptions)
+			_, err := d.dockerClient.ServiceUpdate(ctx, service.ID, service.Version, serviceSpec, swarm.ServiceUpdateOptions{})
 			if err != nil {
 				return fmt.Errorf("failed to update service %s: %v", service.Spec.Name, err)
-			}
-
-			if len(updateResponse.Warnings) > 0 {
-				log.Warnf("Service update warnings for %s: %v", service.Spec.Name, updateResponse.Warnings)
 			}
 
 			updatedServices = append(updatedServices, service.Spec.Name)
