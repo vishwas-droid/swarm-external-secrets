@@ -394,13 +394,13 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 	}
 
 	var existingSecret *swarm.Secret
-	for _, secret := range secrets {
+	for i := range secrets {
+		secret := &secrets[i]
 		if secret.Spec.Name == secretName {
-			existingSecret = &secret
+			existingSecret = secret
 			break
 		}
 	}
-
 	if existingSecret == nil {
 		return fmt.Errorf("secret %s not found", secretName)
 	}
