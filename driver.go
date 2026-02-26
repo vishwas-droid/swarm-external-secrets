@@ -392,13 +392,18 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 	if err != nil {
 		return fmt.Errorf("failed to list secrets: %v", err)
 	}
-
 	var existingSecret *swarm.Secret
 
-	for _, secret := range secrets {
-		if secret.Spec.Name == secretName || strings.HasPrefix(secret.Spec.Name, secretName+"-") {
-			if existingSecret == nil || secret.CreatedAt.After(existingSecret.CreatedAt) {
-				existingSecret = &secret
+	for i := range secrets {
+		secret := secrets[i]
+
+		if secret.Spec.Name == secretName ||
+			strings.HasPrefix(secret.Spec.Name, secretName+"-") {
+
+			if existingSecret == nil ||
+				secret.Meta.CreatedAt.After(existingSecret.Meta.CreatedAt) {
+
+				existingSecret = &secrets[i]
 			}
 		}
 	}
