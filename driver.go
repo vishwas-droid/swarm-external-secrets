@@ -467,6 +467,8 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
                 oldSecretName, secretRef.SecretName)
 			if secretRef.SecretName == oldSecretName ||
 				strings.HasPrefix(secretRef.SecretName, oldSecretName+"-") {
+				log.Printf("rotation update: old=%s new=%s",
+                    oldSecretName, newSecretName)
 				// Update to use the new secret name and ID
 				updatedSecrets[i] = &swarm.SecretReference{
 					File:       secretRef.File,
