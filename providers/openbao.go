@@ -120,12 +120,16 @@ func (o *OpenBaoProvider) CheckSecretChanged(ctx context.Context, secretInfo *Se
 
 	// Extract current value
 	var data map[string]interface{}
+
 	if secretData, ok := secret.Data["data"]; ok {
-		data = secretData.(map[string]interface{})
+		nested, ok := secretData.(map[string]interface{})
+		if !ok {
+			return false, fmt.Errorf("unexpected format for nested secret data")
+		}
+		data = nested
 	} else {
 		data = secret.Data
 	}
-
 	var currentValue []byte
 	if value, ok := data[secretInfo.SecretField]; ok {
 		currentValue = []byte(fmt.Sprintf("%v", value))
