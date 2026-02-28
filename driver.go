@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,30 +58,44 @@ func NewDriver() (*SecretsDriver, error) {
 		}
 	}
 
+	enableRotation := true
+	if v, err := strconv.ParseBool(getEnvOrDefault("ENABLE_ROTATION", "true")); err == nil {
+		enableRotation = v
+	}
+
+	enableMonitoring := true
+	if v, err := strconv.ParseBool(getEnvOrDefault("ENABLE_MONITORING", "true")); err == nil {
+		enableMonitoring = v
+	}
+
 	config := &SecretsConfig{
-		ProviderType:     providerType,
-		EnableRotation:   getEnvOrDefault("ENABLE_ROTATION", "true") == "true",
-		RotationInterval: parseDurationOrDefault(getEnvOrDefault("ROTATION_INTERVAL", "10s")),
-		EnableMonitoring: getEnvOrDefault("ENABLE_MONITORING", "true") == "true",
-		MonitoringPort:   parseIntOrDefault(getEnvOrDefault("MONITORING_PORT", "8080")),
-		Settings:         settings,
+		ProviderType:   providerType,
+		EnableRotation: enableRotation,
+		RotationInterval: parseDurationOrDefault(
+			getEnvOrDefault("ROTATION_INTERVAL", "10s"),
+		),
+		EnableMonitoring: enableMonitoring,
+		MonitoringPort: parseIntOrDefault(
+			getEnvOrDefault("MONITORING_PORT", "8080"),
+		),
+		Settings: settings,
 	}
 
 	// Create the appropriate provider
 	provider, err := providers.CreateProvider(config.ProviderType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create provider: %v", err)
+		return nil, fmt.Errorf("failed to create provider: %w", err)
 	}
 
 	// Initialize the provider
 	if err := provider.Initialize(settings); err != nil {
-		return nil, fmt.Errorf("failed to initialize %s provider: %v", config.ProviderType, err)
+		return nil, fmt.Errorf("failed to initialize %s provider: %w", config.ProviderType, err)
 	}
 
 	// Create Docker client
 	dockerClient, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %v", err)
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
 	// Create context for monitoring
@@ -166,13 +181,15 @@ func (d *SecretsDriver) Get(req secrets.Request) secrets.Response {
 func (d *SecretsDriver) shouldNotReuse(req secrets.Request) bool {
 	// Check for explicit label
 	if reuse, exists := req.SecretLabels["vault_reuse"]; exists {
-		return strings.ToLower(reuse) == "false"
+		return strings.EqualFold(reuse, "false")
 	}
 
+	name := strings.ToLower(req.SecretName)
+
 	// Don't reuse dynamic secrets or certificates
-	if strings.Contains(req.SecretName, "cert") ||
-		strings.Contains(req.SecretName, "token") ||
-		strings.Contains(req.SecretName, "dynamic") {
+	if strings.Contains(name, "cert") ||
+		strings.Contains(name, "token") ||
+		strings.Contains(name, "dynamic") {
 		return true
 	}
 
@@ -364,12 +381,12 @@ func (d *SecretsDriver) rotateSecret(secretInfo *providers.SecretInfo) error {
 
 	newValue, err := d.provider.GetSecret(ctx, req)
 	if err != nil {
-		return fmt.Errorf("failed to get updated secret from provider: %v", err)
+		return fmt.Errorf("failed to get updated secret from provider: %w", err)
 	}
 
 	// Update Docker secret (this now handles service updates internally)
 	if err := d.updateDockerSecret(secretInfo.DockerSecretName, newValue); err != nil {
-		return fmt.Errorf("failed to update docker secret: %v", err)
+		return fmt.Errorf("failed to update docker secret: %w", err)
 	}
 
 	// Update tracking information
@@ -390,7 +407,7 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 	// List existing secrets to find the one to update
 	secrets, err := d.dockerClient.SecretList(ctx, swarm.SecretListOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to list secrets: %v", err)
+		return fmt.Errorf("failed to list secrets: %w", err)
 	}
 
 	var existingSecret *swarm.Secret
@@ -420,7 +437,7 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 	// Create the new secret
 	createResponse, err := d.dockerClient.SecretCreate(ctx, newSecretSpec)
 	if err != nil {
-		return fmt.Errorf("failed to create new secret version: %v", err)
+		return fmt.Errorf("failed to create new secret version: %w", err)
 	}
 
 	log.Printf("Created new version of secret %s with name %s and ID: %s", secretName, newSecretName, createResponse.ID)
@@ -431,7 +448,7 @@ func (d *SecretsDriver) updateDockerSecret(secretName string, newValue []byte) e
 		if cleanupErr := d.dockerClient.SecretRemove(ctx, createResponse.ID); cleanupErr != nil {
 			log.Warnf("failed to remove new secret %s after service update error: %v", createResponse.ID, cleanupErr)
 		}
-		return fmt.Errorf("failed to update services to use new secret: %v", err)
+		return fmt.Errorf("failed to update services to use new secret: %w", err)
 	}
 
 	// Remove the old secret only after services are updated
@@ -451,7 +468,7 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 	// List all services
 	services, err := d.dockerClient.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to list services: %v", err)
+		return fmt.Errorf("failed to list services: %w", err)
 	}
 
 	var updatedServices []string
@@ -489,7 +506,7 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 			updateOptions := swarm.ServiceUpdateOptions{}
 			updateResponse, err := d.dockerClient.ServiceUpdate(ctx, service.ID, service.Version, serviceSpec, updateOptions)
 			if err != nil {
-				return fmt.Errorf("failed to update service %s: %v", service.Spec.Name, err)
+				return fmt.Errorf("failed to update service %s: %w", service.Spec.Name, err)
 			}
 
 			if len(updateResponse.Warnings) > 0 {

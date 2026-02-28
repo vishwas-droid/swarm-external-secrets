@@ -39,7 +39,7 @@ func (a *AWSProvider) Initialize(config map[string]string) error {
 	// Load AWS configuration
 	cfg, err := a.loadAWSConfig()
 	if err != nil {
-		return fmt.Errorf("failed to load AWS config: %v", err)
+		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	// Create Secrets Manager client
@@ -61,7 +61,7 @@ func (a *AWSProvider) GetSecret(ctx context.Context, req secrets.Request) ([]byt
 
 	result, err := a.client.GetSecretValue(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get secret from AWS Secrets Manager: %v", err)
+		return nil, fmt.Errorf("failed to get secret from AWS Secrets Manager: %w", err)
 	}
 
 	if result.SecretString == nil {
@@ -71,7 +71,7 @@ func (a *AWSProvider) GetSecret(ctx context.Context, req secrets.Request) ([]byt
 	// Extract the secret value
 	value, err := a.extractSecretValue(*result.SecretString, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract secret value: %v", err)
+		return nil, fmt.Errorf("failed to extract secret value: %w", err)
 	}
 
 	log.Printf("Successfully retrieved secret from AWS Secrets Manager")
@@ -92,7 +92,7 @@ func (a *AWSProvider) CheckSecretChanged(ctx context.Context, secretInfo *Secret
 
 	result, err := a.client.GetSecretValue(ctx, input)
 	if err != nil {
-		return false, fmt.Errorf("error reading secret from AWS Secrets Manager: %v", err)
+		return false, fmt.Errorf("error reading secret from AWS Secrets Manager: %w", err)
 	}
 
 	if result.SecretString == nil {
