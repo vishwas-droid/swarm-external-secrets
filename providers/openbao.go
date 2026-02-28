@@ -22,6 +22,7 @@ type OpenBaoConfig struct {
 	Address    string
 	Token      string
 	MountPath  string
+	KVVersion  string
 	RoleID     string
 	SecretID   string
 	AuthMethod string
@@ -36,6 +37,7 @@ func (o *OpenBaoProvider) Initialize(config map[string]string) error {
 		Address:    getConfigOrDefault(config, "OPENBAO_ADDR", "http://localhost:8200"),
 		Token:      config["OPENBAO_TOKEN"],
 		MountPath:  getConfigOrDefault(config, "OPENBAO_MOUNT_PATH", "secret"),
+		KVVersion:  getConfigOrDefault(config, "OPENBAO_KV_VERSION", "2"),
 		RoleID:     config["OPENBAO_ROLE_ID"],
 		SecretID:   config["OPENBAO_SECRET_ID"],
 		AuthMethod: getConfigOrDefault(config, "OPENBAO_AUTH_METHOD", "token"),
@@ -192,14 +194,14 @@ func (o *OpenBaoProvider) buildSecretPath(req secrets.Request) string {
 	// Use custom path from labels if provided
 	if customPath, exists := req.SecretLabels["openbao_path"]; exists {
 		// For KV v2, ensure we have the /data/ prefix
-		if o.config.MountPath == "secret" {
+		if o.config.KVVersion == "2" {
 			return fmt.Sprintf("%s/data/%s", o.config.MountPath, customPath)
 		}
 		return fmt.Sprintf("%s/%s", o.config.MountPath, customPath)
 	}
 
 	// Default path structure for KV v2
-	if o.config.MountPath == "secret" {
+	if o.config.KVVersion == "2" {
 		if req.ServiceName != "" {
 			return fmt.Sprintf("%s/data/%s/%s", o.config.MountPath, req.ServiceName, req.SecretName)
 		}
