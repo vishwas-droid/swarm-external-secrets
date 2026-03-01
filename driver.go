@@ -41,6 +41,17 @@ type SecretsConfig struct {
 	MonitoringPort   int
 	Settings         map[string]string
 }
+func parseBoolEnv(key string, defaultVal bool) bool {
+    raw := getEnvOrDefault(key, strconv.FormatBool(defaultVal))
+
+    v, err := strconv.ParseBool(raw)
+    if err != nil {
+        log.Warnf("Invalid boolean value for %s: %q, defaulting to %t", key, raw, defaultVal)
+        return defaultVal
+    }
+
+    return v
+}
 
 // NewDriver creates a new Driver instance with multi-provider support
 func NewDriver() (*SecretsDriver, error) {
@@ -66,26 +77,21 @@ func NewDriver() (*SecretsDriver, error) {
 		log.Warnf("Invalid boolean value for ENABLE_ROTATION: %q, defaulting to true", rotationEnv)
 	}
 
-	enableMonitoring := true
-	monitoringEnv := getEnvOrDefault("ENABLE_MONITORING", "true")
-	if v, err := strconv.ParseBool(monitoringEnv); err == nil {
-		enableMonitoring = v
-	} else {
-		log.Warnf("Invalid boolean value for ENABLE_MONITORING: %q, defaulting to true", monitoringEnv)
-	}
+	enableRotation := parseBoolEnv("ENABLE_ROTATION", true)
+    enableMonitoring := parseBoolEnv("ENABLE_MONITORING", true)
 
-	config := &SecretsConfig{
-		ProviderType:   providerType,
-		EnableRotation: enableRotation,
-		RotationInterval: parseDurationOrDefault(
-			getEnvOrDefault("ROTATION_INTERVAL", "10s"),
-		),
-		EnableMonitoring: enableMonitoring,
-		MonitoringPort: parseIntOrDefault(
-			getEnvOrDefault("MONITORING_PORT", "8080"),
-		),
-		Settings: settings,
-	}
+    config := &SecretsConfig{
+        ProviderType:      providerType,
+        EnableRotation:    enableRotation,
+        RotationInterval:  parseDurationOrDefault(
+            getEnvOrDefault("ROTATION_INTERVAL", "10s"),
+        ),
+        EnableMonitoring:  enableMonitoring,
+        MonitoringPort:    parseIntOrDefault(
+            getEnvOrDefault("MONITORING_PORT", "8080"),
+        ),
+        Settings: settings,
+    }
 
 	// Create the appropriate provider
 	provider, err := providers.CreateProvider(config.ProviderType)
@@ -492,7 +498,9 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 		updatedSecrets := make([]*swarm.SecretReference, len(containerSpec.Secrets))
 
 		for i, secretRef := range containerSpec.Secrets {
-			if secretRef.SecretName == oldSecretName {
+			// Match exact name or versioned variants (e.g., secret-1, secret-2)
+            if secretRef.SecretName == oldSecretName ||
+	            strings.HasPrefix(secretRef.SecretName, oldSecretName+"-") {
 				// Update to use the new secret name and ID
 				updatedSecrets[i] = &swarm.SecretReference{
 					File:       secretRef.File,
@@ -567,45 +575,51 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 // 	return nil
 // }
 
-// Stop gracefully stops the monitoring and cleans up resources
+// Stop gracefully stops monitoring components and releases resources.
+// It attempts to shut down all components and collects any errors
+// instead of failing fast, so we don't miss cleanup steps.
 func (d *SecretsDriver) Stop() error {
-	var firstErr error
+	var errs []error
 
+	// Cancel monitoring context if running
 	if d.monitorCancel != nil {
 		d.monitorCancel()
 	}
 
+	// Stop monitoring loop if initialized
 	if d.monitor != nil {
 		d.monitor.Stop()
 	}
 
+	// Stop web interface and capture any shutdown error
 	if d.webInterface != nil {
 		if err := d.webInterface.Stop(); err != nil {
 			log.Warnf("Error stopping web interface: %v", err)
-			if firstErr == nil {
-				firstErr = err
-			}
+			errs = append(errs, err)
 		}
 	}
 
+	// Close provider and record error if it occurs
 	if d.provider != nil {
 		if err := d.provider.Close(); err != nil {
 			log.Warnf("Error closing provider: %v", err)
-			if firstErr == nil {
-				firstErr = err
-			}
+			errs = append(errs, err)
 		}
 	}
 
+	// Close Docker client if initialized
 	if d.dockerClient != nil {
 		if err := d.dockerClient.Close(); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
+			errs = append(errs, err)
 		}
 	}
 
-	return firstErr
+	// If any shutdown errors occurred, return a combined error
+	if len(errs) > 0 {
+		return fmt.Errorf("shutdown errors: %v", errs)
+	}
+
+	return nil
 }
 
 // Helper methods for building provider-specific secret paths/names
