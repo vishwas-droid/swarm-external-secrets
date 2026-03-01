@@ -59,20 +59,20 @@ func NewDriver() (*SecretsDriver, error) {
 	}
 
 	enableRotation := true
-    rotationEnv := getEnvOrDefault("ENABLE_ROTATION", "true")
-    if v, err := strconv.ParseBool(rotationEnv); err == nil {
-	    enableRotation = v
-    } else {
-	    log.Warnf("Invalid boolean value for ENABLE_ROTATION: %q, defaulting to true", rotationEnv)
-    }
+	rotationEnv := getEnvOrDefault("ENABLE_ROTATION", "true")
+	if v, err := strconv.ParseBool(rotationEnv); err == nil {
+		enableRotation = v
+	} else {
+		log.Warnf("Invalid boolean value for ENABLE_ROTATION: %q, defaulting to true", rotationEnv)
+	}
 
-    enableMonitoring := true
-    monitoringEnv := getEnvOrDefault("ENABLE_MONITORING", "true")
-    if v, err := strconv.ParseBool(monitoringEnv); err == nil {
-	    enableMonitoring = v
-    } else {
-	    log.Warnf("Invalid boolean value for ENABLE_MONITORING: %q, defaulting to true", monitoringEnv)
-    }
+	enableMonitoring := true
+	monitoringEnv := getEnvOrDefault("ENABLE_MONITORING", "true")
+	if v, err := strconv.ParseBool(monitoringEnv); err == nil {
+		enableMonitoring = v
+	} else {
+		log.Warnf("Invalid boolean value for ENABLE_MONITORING: %q, defaulting to true", monitoringEnv)
+	}
 
 	config := &SecretsConfig{
 		ProviderType:   providerType,
@@ -480,30 +480,30 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 	var updatedServices []string
 
 	for _, service := range services {
-	    // Check if service uses this secret and update the reference
-	    needsUpdate := false
+		// Check if service uses this secret and update the reference
+		needsUpdate := false
 
-	    taskTemplate := service.Spec.TaskTemplate
-	    containerSpec := taskTemplate.ContainerSpec
-	    if containerSpec == nil {
-		    continue
-	    }
+		taskTemplate := service.Spec.TaskTemplate
+		containerSpec := taskTemplate.ContainerSpec
+		if containerSpec == nil {
+			continue
+		}
 
-	    updatedSecrets := make([]*swarm.SecretReference, len(containerSpec.Secrets))
+		updatedSecrets := make([]*swarm.SecretReference, len(containerSpec.Secrets))
 
-	    for i, secretRef := range containerSpec.Secrets {
-		    if secretRef.SecretName == oldSecretName {
-			    // Update to use the new secret name and ID
-			    updatedSecrets[i] = &swarm.SecretReference{
-				    File:       secretRef.File,
-				    SecretID:   newSecretID,
-				    SecretName: newSecretName,
-			    }
-			    needsUpdate = true
-		    } else {
-			    updatedSecrets[i] = secretRef
-		    }
-	    }
+		for i, secretRef := range containerSpec.Secrets {
+			if secretRef.SecretName == oldSecretName {
+				// Update to use the new secret name and ID
+				updatedSecrets[i] = &swarm.SecretReference{
+					File:       secretRef.File,
+					SecretID:   newSecretID,
+					SecretName: newSecretName,
+				}
+				needsUpdate = true
+			} else {
+				updatedSecrets[i] = secretRef
+			}
+		}
 
 		if needsUpdate {
 			// Update service with new secret references
@@ -650,14 +650,12 @@ func (d *SecretsDriver) buildAWSSecretName(req secrets.Request) string {
 func (d *SecretsDriver) buildGCPSecretName(req secrets.Request) string {
 	if customName, exists := req.SecretLabels["gcp_secret_name"]; exists {
 		return normalizeGCPSecretName(customName)
-		
 	}
 
 	secretName := req.SecretName
 	if req.ServiceName != "" {
 		secretName = fmt.Sprintf("%s-%s", req.ServiceName, req.SecretName)
-	
-	}   
+	}
 
 	return normalizeGCPSecretName(secretName)
 }
@@ -720,14 +718,14 @@ func (d *SecretsDriver) buildAzureSecretName(req secrets.Request) string {
 	result = strings.Trim(result, "-")
 
 	if result == "" || (result[0] >= '0' && result[0] <= '9') {
-	    result = "secret-" + result
-    }
+		result = "secret-" + result
+	}
 
-    if len(result) > 127 {
-	    result = result[:127]
-    }
+	if len(result) > 127 {
+		result = result[:127]
+	}
 
-    return result
+	return result
 }
 
 // func (d *SecretsDriver) buildVaultSecretPath(req secrets.Request) string {
