@@ -476,9 +476,14 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 	for _, service := range services {
 		// Check if service uses this secret and update the reference
 		needsUpdate := false
-		updatedSecrets := make([]*swarm.SecretReference, len(service.Spec.TaskTemplate.ContainerSpec.Secrets))
+		taskTemplate := service.Spec.TaskTemplate
+        containerSpec := taskTemplate.ContainerSpec
+        if containerSpec == nil {
+            continue
+        }
+		updatedSecrets := make([]*swarm.SecretReference, len(ContainerSpec.Secrets))
 
-		for i, secretRef := range service.Spec.TaskTemplate.ContainerSpec.Secrets {
+		for i, secretRef := range ContainerSpec.Secrets {
 			if secretRef.SecretName == oldSecretName {
 				// Update to use the new secret name and ID
 				updatedSecrets[i] = &swarm.SecretReference{
@@ -556,6 +561,8 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 
 // Stop gracefully stops the monitoring and cleans up resources
 func (d *SecretsDriver) Stop() error {
+	var firstErr error
+
 	if d.monitorCancel != nil {
 		d.monitorCancel()
 	}
@@ -567,19 +574,30 @@ func (d *SecretsDriver) Stop() error {
 	if d.webInterface != nil {
 		if err := d.webInterface.Stop(); err != nil {
 			log.Warnf("Error stopping web interface: %v", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 
 	if d.provider != nil {
 		if err := d.provider.Close(); err != nil {
 			log.Warnf("Error closing provider: %v", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 
 	if d.dockerClient != nil {
-		return d.dockerClient.Close()
+		if err := d.dockerClient.Close(); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 	}
-	return nil
+
+	return firstErr
 }
 
 // Helper methods for building provider-specific secret paths/names
@@ -623,13 +641,15 @@ func (d *SecretsDriver) buildAWSSecretName(req secrets.Request) string {
 
 func (d *SecretsDriver) buildGCPSecretName(req secrets.Request) string {
 	if customName, exists := req.SecretLabels["gcp_secret_name"]; exists {
-		return customName
+		return normalizeGCPSecretName(customName)
+		
 	}
 
 	secretName := req.SecretName
 	if req.ServiceName != "" {
 		secretName = fmt.Sprintf("%s-%s", req.ServiceName, req.SecretName)
-	}
+	
+	}   
 
 	return normalizeGCPSecretName(secretName)
 }
@@ -656,6 +676,11 @@ func normalizeGCPSecretName(secretName string) string {
 			}
 		}
 	}
+
+	if len(result) > 255 {
+		result = result[:255]
+	}
+
 	return result
 }
 
@@ -687,9 +712,14 @@ func (d *SecretsDriver) buildAzureSecretName(req secrets.Request) string {
 	result = strings.Trim(result, "-")
 
 	if result == "" || (result[0] >= '0' && result[0] <= '9') {
-		result = "secret-" + result
-	}
-	return result
+	    result = "secret-" + result
+    }
+
+    if len(result) > 127 {
+	    result = result[:127]
+    }
+
+    return result
 }
 
 // func (d *SecretsDriver) buildVaultSecretPath(req secrets.Request) string {
