@@ -63,13 +63,7 @@ func (a *AWSProvider) GetSecret(ctx context.Context, req secrets.Request) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secret from AWS Secrets Manager: %v", err)
 	}
-
-	if result.SecretString == nil {
-		return nil, fmt.Errorf("secret %s has no string value", secretName)
-	}
-
-	// Extract the secret value
-	value, err := a.extractSecretValue(*result.SecretString, req)
+	value, err := a.extractAWSSecret(result, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract secret value: %v", err)
 	}
@@ -78,11 +72,22 @@ func (a *AWSProvider) GetSecret(ctx context.Context, req secrets.Request) ([]byt
 	return value, nil
 }
 
-// SupportsRotation indicates that AWS Secrets Manager supports secret rotation monitoring
-func (a *AWSProvider) SupportsRotation() bool {
-	return true
+func (a *AWSProvider) extractAWSSecret(
+	result *secretsmanager.GetSecretValueOutput,
+	req secrets.Request,
+) ([]byte, error) {
+	if result.SecretString != nil {
+		return a.extractSecretValue(*result.SecretString, req)
+	}
+
+	if result.SecretBinary != nil {
+		return result.SecretBinary, nil
+	}
+
+	return nil, fmt.Errorf("secret has no value")
 }
 
+// SupportsRotation indicates that AWS Secrets Manager supports secret rotation monitoring
 // CheckSecretChanged checks if a secret has changed in AWS Secrets Manager
 func (a *AWSProvider) CheckSecretChanged(ctx context.Context, secretInfo *SecretInfo) (bool, error) {
 	// Get secret value from AWS Secrets Manager
@@ -95,20 +100,24 @@ func (a *AWSProvider) CheckSecretChanged(ctx context.Context, secretInfo *Secret
 		return false, fmt.Errorf("error reading secret from AWS Secrets Manager: %v", err)
 	}
 
-	if result.SecretString == nil {
-		return false, fmt.Errorf("secret %s has no string value", secretInfo.SecretPath)
-	}
-
-	// Extract current value
-	currentValue, err := a.extractSecretValueByField(*result.SecretString, secretInfo.SecretField)
+	// Extract current value (supports both SecretString and SecretBinary)
+	value, err := a.extractAWSSecret(result, secrets.Request{
+		SecretLabels: map[string]string{
+			"aws_field": secretInfo.SecretField,
+		},
+	})
 	if err != nil {
-		return false, fmt.Errorf("failed to extract secret field %s: %v", secretInfo.SecretField, err)
+		return false, fmt.Errorf("failed to extract secret value: %v", err)
 	}
 
 	// Calculate current hash
-	currentHash := fmt.Sprintf("%x", sha256.Sum256(currentValue))
+	currentHash := fmt.Sprintf("%x", sha256.Sum256(value))
 
 	return currentHash != secretInfo.LastHash, nil
+}
+
+func (a *AWSProvider) SupportsRotation() bool {
+	return true
 }
 
 // GetProviderName returns the name of this provider
@@ -189,14 +198,17 @@ func (a *AWSProvider) extractSecretValue(secretString string, req secrets.Reques
 			}
 		}
 
-		// If no specific field found, return the first string value
-		for _, value := range data {
-			if strValue, ok := value.(string); ok {
-				return []byte(strValue), nil
+		// If only one field exists, return it safely
+		if len(data) == 1 {
+			for _, v := range data {
+				return []byte(fmt.Sprintf("%v", v)), nil
 			}
 		}
 
-		return nil, fmt.Errorf("no suitable secret value found in JSON")
+		// Multiple fields present and none matched default fields
+		return nil, fmt.Errorf(
+			"multiple fields found in secret; specify aws_field label explicitly",
+		)
 	}
 
 	// If not JSON, return the raw string
