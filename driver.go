@@ -492,6 +492,7 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 		taskTemplate := service.Spec.TaskTemplate
 		containerSpec := taskTemplate.ContainerSpec
 		if containerSpec == nil {
+			log.Debugf("Skipping service %s: no container spec defined", service.Spec.Name)
 			continue
 		}
 
