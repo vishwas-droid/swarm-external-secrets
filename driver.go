@@ -59,14 +59,20 @@ func NewDriver() (*SecretsDriver, error) {
 	}
 
 	enableRotation := true
-	if v, err := strconv.ParseBool(getEnvOrDefault("ENABLE_ROTATION", "true")); err == nil {
-		enableRotation = v
-	}
+    rotationEnv := getEnvOrDefault("ENABLE_ROTATION", "true")
+    if v, err := strconv.ParseBool(rotationEnv); err == nil {
+	    enableRotation = v
+    } else {
+	    log.Warnf("Invalid boolean value for ENABLE_ROTATION: %q, defaulting to true", rotationEnv)
+    }
 
-	enableMonitoring := true
-	if v, err := strconv.ParseBool(getEnvOrDefault("ENABLE_MONITORING", "true")); err == nil {
-		enableMonitoring = v
-	}
+    enableMonitoring := true
+    monitoringEnv := getEnvOrDefault("ENABLE_MONITORING", "true")
+    if v, err := strconv.ParseBool(monitoringEnv); err == nil {
+	    enableMonitoring = v
+    } else {
+	    log.Warnf("Invalid boolean value for ENABLE_MONITORING: %q, defaulting to true", monitoringEnv)
+    }
 
 	config := &SecretsConfig{
 		ProviderType:   providerType,
@@ -474,28 +480,30 @@ func (d *SecretsDriver) updateServicesSecretReference(oldSecretName, newSecretNa
 	var updatedServices []string
 
 	for _, service := range services {
-		// Check if service uses this secret and update the reference
-		needsUpdate := false
-		taskTemplate := service.Spec.TaskTemplate
-        containerSpec := taskTemplate.ContainerSpec
-        if containerSpec == nil {
-            continue
-        }
-		updatedSecrets := make([]*swarm.SecretReference, len(ContainerSpec.Secrets))
+	    // Check if service uses this secret and update the reference
+	    needsUpdate := false
 
-		for i, secretRef := range ContainerSpec.Secrets {
-			if secretRef.SecretName == oldSecretName {
-				// Update to use the new secret name and ID
-				updatedSecrets[i] = &swarm.SecretReference{
-					File:       secretRef.File,
-					SecretID:   newSecretID, // Use actual Docker secret ID
-					SecretName: newSecretName,
-				}
-				needsUpdate = true
-			} else {
-				updatedSecrets[i] = secretRef
-			}
-		}
+	    taskTemplate := service.Spec.TaskTemplate
+	    containerSpec := taskTemplate.ContainerSpec
+	    if containerSpec == nil {
+		    continue
+	    }
+
+	    updatedSecrets := make([]*swarm.SecretReference, len(containerSpec.Secrets))
+
+	    for i, secretRef := range containerSpec.Secrets {
+		    if secretRef.SecretName == oldSecretName {
+			    // Update to use the new secret name and ID
+			    updatedSecrets[i] = &swarm.SecretReference{
+				    File:       secretRef.File,
+				    SecretID:   newSecretID,
+				    SecretName: newSecretName,
+			    }
+			    needsUpdate = true
+		    } else {
+			    updatedSecrets[i] = secretRef
+		    }
+	    }
 
 		if needsUpdate {
 			// Update service with new secret references
