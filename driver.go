@@ -17,6 +17,7 @@ import (
 
 	"github.com/sugar-org/vault-swarm-plugin/monitoring"
 	"github.com/sugar-org/vault-swarm-plugin/providers"
+	"github.com/google/uuid"
 )
 
 // SecretsDriver implements the secrets.Driver interface with multi-provider support
@@ -127,42 +128,64 @@ func NewDriver() (*SecretsDriver, error) {
 
 // Get method implements the secrets.Driver interface
 func (d *SecretsDriver) Get(req secrets.Request) secrets.Response {
-	reqID := shortID()
-	start := time.Now()
-	log.Printf("[%s] resolving %s via %s", reqID, req.SecretName, d.provider.GetProviderName())
+    // Generate request correlation ID
+    reqUUID := uuid.New()
+    reqID := reqUUID.String()[:8]
 
-	if req.SecretName == "" {
-		return secrets.Response{
-			Err: "secret name is required",
-		}
-	}
+    start := time.Now()
 
-	// Add context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    log.Printf("[req:%s] resolving secret=%s provider=%s",
+        reqID,
+        req.SecretName,
+        d.provider.GetProviderName(),
+    )
 
-	// Get secret from the provider
-	value, err := d.provider.GetSecret(ctx, req)
-	if err != nil {
-		log.Printf("[%s] failed %s (%s): %v", reqID, req.SecretName, time.Since(start), err)
-		return secrets.Response{
-			Err: fmt.Sprintf("failed to get secret: %v", err),
-		}
-	}
+    if req.SecretName == "" {
+        log.Printf("[req:%s] failed secret=<empty> duration=%s error=secret name is required",
+            reqID,
+            time.Since(start),
+        )
+        return secrets.Response{
+            Err: "secret name is required",
+        }
+    }
 
-	// Track this secret for monitoring if rotation is enabled
-	if d.config.EnableRotation && d.provider.SupportsRotation() {
-		d.trackSecret(req, value)
-	}
+    // Add context with timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-	// Determine if secret should be reusable
-	doNotReuse := d.shouldNotReuse(req)
+    // Fetch secret from provider
+    value, err := d.provider.GetSecret(ctx, req)
+    if err != nil {
+        log.Printf("[req:%s] failed secret=%s duration=%s error=%v",
+            reqID,
+            req.SecretName,
+            time.Since(start),
+            err,
+        )
+        return secrets.Response{
+            Err: fmt.Sprintf("failed to get secret: %v", err),
+        }
+    }
 
-	log.Printf("[%s] resolved %s (%s)", reqID, req.SecretName, time.Since(start))
-	return secrets.Response{
-		Value:      value,
-		DoNotReuse: doNotReuse,
-	}
+    // Track this secret if rotation is enabled
+    if d.config.EnableRotation && d.provider.SupportsRotation() {
+        d.trackSecret(req, value)
+    }
+
+    // Determine reuse behavior
+    doNotReuse := d.shouldNotReuse(req)
+
+    log.Printf("[req:%s] resolved secret=%s duration=%s",
+        reqID,
+        req.SecretName,
+        time.Since(start),
+    )
+
+    return secrets.Response{
+        Value:      value,
+        DoNotReuse: doNotReuse,
+    }
 }
 
 // shouldNotReuse determines if the secret should not be reused
