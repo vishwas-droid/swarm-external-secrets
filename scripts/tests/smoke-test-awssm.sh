@@ -16,7 +16,10 @@ STACK_NAME="smoke-awssm"
 SECRET_NAME="smoke_secret"
 SECRET_PATH="database/mysql"
 SECRET_FIELD="password"
-SECRET_VALUE="awssm-smoke-pass-v1"
+SECRET_VALUE_ROTATED="awssm-smoke-pass-v2"
+SECRET_VALUE_ROTATED_B64=$(echo -n "$SECRET_VALUE_ROTATED" | base64)SECRET_VALUE="awssm-smoke-pass-v1"
+SECRET_VALUE_ROTATED="awssm-smoke-pass-v2"
+SECRET_VALUE_ROTATED_B64=$(echo -n "$SECRET_VALUE_ROTATED" | base64)
 SECRET_VALUE_ROTATED="awssm-smoke-pass-v2"
 COMPOSE_FILE="${SCRIPT_DIR}/smoke-awssm-compose.yml"
 
@@ -111,9 +114,8 @@ verify_secret "${STACK_NAME}" "app" "${SECRET_NAME}" "${SECRET_VALUE}" 60
 # Rotate the password and verify
 info "Rotating secret in AWS Secrets Manager..."
 awslocal_cmd secretsmanager put-secret-value \
-    --region "${AWS_REGION}" \
-    --secret-id "${SECRET_PATH}" \
-    --secret-string "{\"${SECRET_FIELD}\":\"${SECRET_VALUE_ROTATED}\"}"
+    --secret-id "$SECRET_NAME" \
+    --secret-binary "$SECRET_VALUE_ROTATED_B64"    --region "${AWS_REGION}" \
 success "Secret rotated to: ${SECRET_VALUE_ROTATED}"
 
 info "Waiting for plugin rotation interval (15s)..."
